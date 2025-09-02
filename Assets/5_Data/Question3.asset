@@ -12,4 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 298f31df05450c34fbc7fce4d24ced7c, type: 3}
   m_Name: Question3
   m_EditorClassIdentifier: 
-  question: "3\uBC88\uC9F8"
+  answers:
+  - 220
+  - 245
+  - 285
+  - 300
+  question: 15x19=?
+  correctAnswerIndex: 2
