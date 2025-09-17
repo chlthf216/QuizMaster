@@ -28,11 +28,73 @@ public class Quiz : MonoBehaviour
     [SerializeField] TextMeshProUGUI scoreText;
     ScoreKeeper scoreKeeper;
 
+    [Header("ProgressBar")]
+    [SerializeField] Slider progressBar;
+
+    [Header("ChatGPT Client")]
+    [SerializeField] ChatGPTClient chatGPTClient;
+    [SerializeField] int questionCount = 3;
+    [SerializeField] TextMeshProUGUI loadingText;
+
+    bool isGeneratingQuestions = false;
+
     public void Start()
     {
         timer = FindFirstObjectByType<Timer>();
         scoreKeeper = FindFirstObjectByType<ScoreKeeper>();
+        chatGPTClient.quizGenerateHandler += QuizGenerateHandler;
+
+        if (questions.Count == 0)
+        {
+            GenerateQuestionsIfNeeded();
+        }
+        else
+        {
+            InitalizeProgressBar();
+        }
+    }
+
+    private void GenerateQuestionsIfNeeded()
+    {
+        if (isGeneratingQuestions) return;
+
+        isGeneratingQuestions = true;
+        GameManager.Instace.ShowLoadingScene();
+
+        string topicToUse = GetTrendingTopic();
+        chatGPTClient.GenerateQuizQuestions(questionCount, topicToUse);
+        Debug.Log($"GenerateQuestionsIfNeeded: {topicToUse}");
+    }
+
+    private string GetTrendingTopic()
+    {
+        string[] topics = new string[] { "과학", "역사", "음악", "영화", "스포츠", "기술", "문학", "예술", "지리", "동물", "K-POP" };
+        int randomIndex = UnityEngine.Random.Range(0, topics.Length);
+        return topics[randomIndex];
+    }
+
+    void QuizGenerateHandler(List<QuestionSO> generatedQuestions)
+    {
+        Debug.Log($"QuizGenerateHandler: {generatedQuestions.Count} questions received.");
+        isGeneratingQuestions = false;
+
+        if (generatedQuestions == null || generatedQuestions.Count == 0)
+        {
+            Debug.LogError("문제 생성에 실패했습니다.");
+            loadingText.text = "문제 생성에 실패했습니다. \n인터넷 연결을 확인하고 다시 시도하세요.";
+            return;
+        }
+
+        questions.AddRange(generatedQuestions);
+        progressBar.maxValue += generatedQuestions.Count;
+
         GetNextQuestion();
+    }
+
+    private void InitalizeProgressBar()
+    {
+        progressBar.maxValue = questions.Count;
+        progressBar.value = 0;
     }
 
     private void Update()
@@ -43,10 +105,17 @@ public class Quiz : MonoBehaviour
             timerImage.sprite = solutionTimerSprite;
         timerImage.fillAmount = timer.fillAmount;
 
+        //다음 질문 불러오기
         if (timer.loadNextQuestion)
         {
-            timer.loadNextQuestion = false;
-            GetNextQuestion();
+            if (questions.Count <= 0)
+            {
+                GenerateQuestionsIfNeeded();
+            }
+            else
+            {
+                GetNextQuestion();
+            }
         }
 
         if (timer.isProblemTime == false && chooseAnswer == false)
@@ -57,17 +126,21 @@ public class Quiz : MonoBehaviour
 
     private void GetNextQuestion()
     {
+        timer.loadNextQuestion = false;
+
         if (questions.Count <= 0)
         {
             Debug.Log("남은 문제가 없습니다.");
             return;
         }
+        GameManager.Instace.ShowQuizScreen();
         chooseAnswer = false;
         SetButtonState(true);
         SetDefaultButtonSprites();
         GetRandomQuestion();
         OnDisplayQuestion();
         scoreKeeper.IncrementQuestionSeen();
+        progressBar.value++;
     }
 
     private void GetRandomQuestion()
@@ -79,7 +152,6 @@ public class Quiz : MonoBehaviour
 
     private void OnDisplayQuestion()
     {
-        Debug.Log("Displaying question. " + currentQuestion.GetQuestion());
         questionText.text = currentQuestion.GetQuestion();
 
         for (int i = 0; i < answerButtons.Length; i++)
@@ -102,6 +174,7 @@ public class Quiz : MonoBehaviour
         {
             questionText.text = "정답입니다!";
             answerButtons[index].GetComponent<Image>().sprite = correctAnswerSprite;
+            scoreKeeper.IncrementCorrectAnswers();
         }
         else
         {
